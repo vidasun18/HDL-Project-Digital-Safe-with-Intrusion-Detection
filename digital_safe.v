@@ -23,7 +23,7 @@ module digital_safe #(
     wire pin_match, failed_check, limit_violation, alarm_request, tamper_latched;
     wire override_pulse, tick_1hz, alarm_done, lockout_done, alarm_led;
     wire [1:0] attempts, override_progress;
-    wire [2:0] state;
+    reg [2:0] state;
     localparam integer ALARM_WIDTH = (ALARM_SECONDS < 2) ? 1 : $clog2(ALARM_SECONDS + 1);
     localparam integer LOCKOUT_WIDTH = (LOCKOUT_SECONDS < 2) ? 1 : $clog2(LOCKOUT_SECONDS + 1);
     wire [ALARM_WIDTH-1:0] alarm_elapsed;
@@ -58,7 +58,11 @@ module digital_safe #(
     assign alarm_elapsed = 0;
     assign lockout_done = 1'b0;
     assign lockout_elapsed = 0;
-    assign state = LOCKED;
+    // CPU_RESETN is active-low; rst is its active-high synchronous form.
+    // The safe remains locked until future authentication logic changes state.
+    always @(posedge CLK100MHZ) begin
+        if (rst) state <= LOCKED;
+    end
     assign failed_check = 1'b0;
     assign alarm_led = 1'b0;
     assign SEG = 7'b1111111;
