@@ -8,11 +8,25 @@ Build and demonstrate a working digital safe using simple synthesizable HDL. Kee
 
 ## Hardware
 
-- Board: Digilent Nexys A7 (Artix-7)
+- Board: Digilent Nexys A7 AMD Artix-7 FPGA Trainer Board
 - Clock: 100 MHz (`CLK100MHZ`)
-- Inputs: board reset, push buttons, and switches
+- Inputs: active-low board reset, push buttons, and switches
 - Outputs: LEDs and the eight-digit seven-segment display
-- Board variant is not yet confirmed. Check the physical board before finalizing the XDC file.
+- The exact FPGA device variant/revision still needs to be checked on the physical board before finalizing XDC constraints.
+- Board references: [Digilent Nexys A7 FPGA board Documentation.pdf](./Digilent%20Nexys%20A7%20FPGA%20board%20Documentation.pdf) and [nexys-a7-d3-schematics.pdf](./nexys-a7-d3-schematics.pdf).
+
+### Input mapping
+
+| Input | Role |
+|---|---|
+| `SW[15:0]` | 16-bit PIN entry |
+| `BTNC` | Submit the PIN |
+| `BTND` | Manually lock the safe |
+| `BTNU` | Reserved for the admin recovery path |
+| `BTNR` | Simulated tamper input |
+| `BTNL` | Reserved; no behavior assigned |
+
+Button presses are debounced before they are used as events. The default PIN and debounce timing are parameters in `digital_safe.v`.
 
 ## Team task allocation
 
