@@ -171,7 +171,34 @@ module digital_safe #(
             end
         end
     end
-    assign alarm_led = 1'b0;
+    localparam integer BLINK_LIMIT = (CLK_HZ > 1) ? (CLK_HZ / 2) : 1;
+    localparam integer BLINK_WIDTH = (BLINK_LIMIT < 2) ? 1 : $clog2(BLINK_LIMIT + 1);
+    reg [BLINK_WIDTH-1:0] blink_counter;
+    reg blink_tick;
+    reg alarm_blink_reg;
+
+    always @(posedge CLK100MHZ) begin
+        if (rst) begin
+            blink_counter <= {BLINK_WIDTH{1'b0}};
+            blink_tick <= 1'b0;
+        end else if (blink_counter >= BLINK_LIMIT - 1) begin
+            blink_counter <= {BLINK_WIDTH{1'b0}};
+            blink_tick <= 1'b1;
+        end else begin
+            blink_counter <= blink_counter + 1'b1;
+            blink_tick <= 1'b0;
+        end
+    end
+
+    always @(posedge CLK100MHZ) begin
+        if (rst || (state != ALARM)) begin
+            alarm_blink_reg <= 1'b1;
+        end else if (blink_tick) begin
+            alarm_blink_reg <= ~alarm_blink_reg;
+        end
+    end
+
+    assign alarm_led = (state == ALARM) && alarm_blink_reg;
     assign SEG = 7'b1111111;
     assign AN = 8'hFF;
     assign DP = 1'b1;
@@ -180,6 +207,9 @@ module digital_safe #(
         LED = 16'b0;
         LED[0] = (state != UNLOCKED);     // locked indicator
         LED[1] = (state == UNLOCKED);     // simulated unlock output
+        LED[2] = alarm_led;               // alarm indicator
+        LED[4:3] = attempts;              // attempt count
+        LED[5] = tamper_latched;          // tamper indicator
     end
 endmodule
 
