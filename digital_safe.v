@@ -78,7 +78,24 @@ module digital_safe #(
     assign tamper_latched = 1'b0;
     assign override_pulse = 1'b0;
     assign override_progress = 2'd0;
-    assign tick_1hz = 1'b0;
+    localparam integer TICK_LIMIT = (CLK_HZ > 0) ? CLK_HZ : 1;
+    localparam integer TICK_WIDTH = (TICK_LIMIT < 2) ? 1 : $clog2(TICK_LIMIT + 1);
+    reg [TICK_WIDTH-1:0] tick_counter;
+    reg tick_1hz_reg;
+    assign tick_1hz = tick_1hz_reg;
+
+    always @(posedge CLK100MHZ) begin
+        if (rst) begin
+            tick_counter <= {TICK_WIDTH{1'b0}};
+            tick_1hz_reg <= 1'b0;
+        end else if (tick_counter >= TICK_LIMIT - 1) begin
+            tick_counter <= {TICK_WIDTH{1'b0}};
+            tick_1hz_reg <= 1'b1;
+        end else begin
+            tick_counter <= tick_counter + 1'b1;
+            tick_1hz_reg <= 1'b0;
+        end
+    end
     assign alarm_done = 1'b0;
     assign alarm_elapsed = 0;
     assign lockout_done = 1'b0;
