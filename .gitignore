@@ -1,7 +1,5 @@
 # Agent files and instructions
 AGENTS.md
-GEMINI.md
-CODEX.md
 CLAUDE.md
 .agents/
 .gemini/
