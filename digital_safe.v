@@ -74,9 +74,19 @@ module digital_safe #(
         end
     end
 
+    reg tamper_latched_reg;
+    assign tamper_latched = tamper_latched_reg;
+
+    always @(posedge CLK100MHZ) begin
+        if (rst || clear_counters) begin
+            tamper_latched_reg <= 1'b0;
+        end else if (tamper_pulse && (state == LOCKED)) begin
+            tamper_latched_reg <= 1'b1;
+        end
+    end
+
     assign limit_violation = 1'b0;
-    assign alarm_request = 1'b0;
-    assign tamper_latched = 1'b0;
+    assign alarm_request = limit_violation || tamper_latched;
     assign override_pulse = 1'b0;
     assign override_progress = 2'd0;
     localparam integer TICK_LIMIT = (CLK_HZ > 0) ? CLK_HZ : 1;
