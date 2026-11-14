@@ -3,6 +3,7 @@ module digital_safe #(
     parameter integer DEBOUNCE_CYCLES = 1_000_000,
     parameter integer ALARM_SECONDS = 2,
     parameter integer LOCKOUT_SECONDS = 15,
+    parameter integer MAX_ATTEMPTS = 3,
     parameter [15:0] USER_PIN = 16'hA5C3,
     parameter [15:0] ADMIN_CODE = 16'hC0DE
 )(
@@ -85,7 +86,7 @@ module digital_safe #(
         end
     end
 
-    assign limit_violation = 1'b0;
+    assign limit_violation = (attempts >= MAX_ATTEMPTS[1:0]);
     assign alarm_request = limit_violation || tamper_latched;
     assign override_pulse = 1'b0;
     assign override_progress = 2'd0;
