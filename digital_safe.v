@@ -31,7 +31,8 @@ module digital_safe #(
     wire [ALARM_WIDTH-1:0] alarm_elapsed;
     wire [LOCKOUT_WIDTH-1:0] lockout_elapsed;
     wire clear_counters = override_pulse || lockout_done;
-    wire [7:0] remaining = 8'd0;
+    wire [7:0] remaining = (state == ALARM)   ? ((ALARM_SECONDS >= alarm_elapsed) ? (ALARM_SECONDS - alarm_elapsed) : 8'd0) :
+                           (state == LOCKOUT) ? ((LOCKOUT_SECONDS >= lockout_elapsed) ? (LOCKOUT_SECONDS - lockout_elapsed) : 8'd0) : 8'd0;
     wire [3:0] status_code = (state == LOCKED) ? 4'h1 :
                              (state == CHECKING) ? 4'hC :
                              (state == UNLOCKED) ? 4'h2 :
@@ -96,10 +97,23 @@ module digital_safe #(
             tick_1hz_reg <= 1'b0;
         end
     end
-    assign alarm_done = 1'b0;
-    assign alarm_elapsed = 0;
-    assign lockout_done = 1'b0;
-    assign lockout_elapsed = 0;
+    safe_timer #(.DURATION_SECONDS(ALARM_SECONDS)) timer_alarm (
+        .clk(CLK100MHZ),
+        .reset(rst),
+        .enable(state == ALARM),
+        .tick(tick_1hz),
+        .elapsed(alarm_elapsed),
+        .done(alarm_done)
+    );
+
+    safe_timer #(.DURATION_SECONDS(LOCKOUT_SECONDS)) timer_lockout (
+        .clk(CLK100MHZ),
+        .reset(rst),
+        .enable(state == LOCKOUT),
+        .tick(tick_1hz),
+        .elapsed(lockout_elapsed),
+        .done(lockout_done)
+    );
     always @(posedge CLK100MHZ) begin
         if (rst) begin
             state <= LOCKED;
@@ -187,6 +201,41 @@ module safe_button_debounce #(
                     press_pulse <= 1'b1;
             end else begin
                 debounce_count <= debounce_count + 1'b1;
+            end
+        end
+    end
+endmodule
+
+module safe_timer #(
+    parameter integer DURATION_SECONDS = 1,
+    parameter integer TIMER_WIDTH = (DURATION_SECONDS < 2) ? 1 : $clog2(DURATION_SECONDS + 1)
+)(
+    input wire clk,
+    input wire reset,
+    input wire enable,
+    input wire tick,
+    output wire [TIMER_WIDTH-1:0] elapsed,
+    output wire done
+);
+    reg [TIMER_WIDTH-1:0] elapsed_reg;
+    reg done_reg;
+
+    assign elapsed = elapsed_reg;
+    assign done = done_reg;
+
+    always @(posedge clk) begin
+        if (reset || !enable) begin
+            elapsed_reg <= {TIMER_WIDTH{1'b0}};
+            done_reg <= 1'b0;
+        end else begin
+            done_reg <= 1'b0;
+            if (tick) begin
+                if (elapsed_reg + 1'b1 >= DURATION_SECONDS) begin
+                    elapsed_reg <= DURATION_SECONDS[TIMER_WIDTH-1:0];
+                    done_reg <= 1'b1;
+                end else begin
+                    elapsed_reg <= elapsed_reg + 1'b1;
+                end
             end
         end
     end
