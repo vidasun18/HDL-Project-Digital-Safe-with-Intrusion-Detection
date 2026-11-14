@@ -90,10 +90,11 @@ module digital_safe #(
 
     assign limit_violation = (attempts >= MAX_ATTEMPTS[1:0]);
     assign alarm_request = limit_violation || tamper_latched;
-    assign override_pulse = 1'b0;
+    assign override_pulse = admin_sequence_valid &&
+        ((state == ALARM) || (state == LOCKOUT));
     assign override_progress = admin_progress_reg;
 
-    // Recognize LEFT, UP, LEFT, UP without activating Phase 5 recovery.
+    // Keep sequence recognition separate from the recovery handshake.
     always @(posedge CLK100MHZ) begin
         if (rst) begin
             admin_progress_reg <= 2'd0;

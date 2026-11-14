@@ -31,7 +31,6 @@ module tb_member3_admin_sequence;
     integer checking_left_event_seen;
     integer baseline_events;
     integer baseline_high_cycles;
-    integer saved_alarm_elapsed;
 
     digital_safe #(
         .CLK_HZ(CLK_HZ),
@@ -343,22 +342,22 @@ module tb_member3_admin_sequence;
             $fatal(1, "reset must leave the valid event inactive");
         $display("PASS: Test A reset clears sequence progress and valid event");
 
-        // Test B: recognize the sequence in ALARM without activating recovery.
+        // Test B: recognize the sequence in ALARM and recover through the existing FSM path.
         enter_alarm();
         baseline_events = valid_event_count;
         baseline_high_cycles = valid_high_cycles;
-        saved_alarm_elapsed = dut.alarm_elapsed;
         send_correct_sequence();
         if (valid_event_count != baseline_events + 1 ||
             valid_high_cycles != baseline_high_cycles + 1)
             $fatal(1, "ALARM sequence must generate exactly one one-cycle valid event");
-        if (dut.state !== ALARM || dut.attempts !== 2'd3 ||
+        if (dut.state !== LOCKED || dut.attempts !== 2'd0 ||
+            dut.tamper_latched !== 1'b0 || dut.alarm_request !== 1'b0 ||
             dut.override_pulse !== 1'b0 || dut.clear_counters !== 1'b0 ||
-            dut.alarm_elapsed !== saved_alarm_elapsed)
-            $fatal(1, "sequence recognition must not recover or restart ALARM in Phase 4");
-        $display("PASS: Test B correct sequence in ALARM; recovery remains disabled");
+            dut.alarm_elapsed !== 0 || dut.alarm_done !== 1'b0 || led[2] !== 1'b0)
+            $fatal(1, "valid ALARM sequence must recover to LOCKED and clear alarm status");
+        $display("PASS: Test B correct sequence in ALARM recovers to LOCKED");
 
-        // Test C: recognize the sequence in LOCKOUT without leaving that state.
+        // Test C: recognize the sequence in LOCKOUT and recover to LOCKED.
         apply_reset();
         enter_alarm();
         wait_for_state(LOCKOUT, CLK_HZ * (ALARM_SECONDS + 1) + 20);
@@ -368,10 +367,12 @@ module tb_member3_admin_sequence;
         if (valid_event_count != baseline_events + 1 ||
             valid_high_cycles != baseline_high_cycles + 1)
             $fatal(1, "LOCKOUT sequence must generate exactly one one-cycle valid event");
-        if (dut.state !== LOCKOUT || dut.attempts !== 2'd3 ||
-            dut.override_pulse !== 1'b0 || dut.clear_counters !== 1'b0)
-            $fatal(1, "sequence recognition must not recover or clear LOCKOUT in Phase 4");
-        $display("PASS: Test C correct sequence in LOCKOUT; timer operation is retained");
+        if (dut.state !== LOCKED || dut.attempts !== 2'd0 ||
+            dut.tamper_latched !== 1'b0 || dut.alarm_request !== 1'b0 ||
+            dut.override_pulse !== 1'b0 || dut.clear_counters !== 1'b0 ||
+            dut.lockout_elapsed !== 0 || dut.lockout_done !== 1'b0 || led[2] !== 1'b0)
+            $fatal(1, "valid LOCKOUT sequence must recover to LOCKED and clear status");
+        $display("PASS: Test C correct sequence in LOCKOUT recovers to LOCKED");
 
         // Test D: wrong events at each progress position reset progress without recognition.
         apply_reset();
@@ -499,9 +500,10 @@ module tb_member3_admin_sequence;
         press_up();
         expect_progress(2'd0);
         if (valid_event_count != baseline_events + 1 ||
-            valid_high_cycles != baseline_high_cycles + 1 || dut.state !== LOCKOUT)
-            $fatal(1, "sequence must complete once in LOCKOUT after ALARM progress");
-        $display("PASS: Test H partial sequence continues across ALARM-to-LOCKOUT");
+            valid_high_cycles != baseline_high_cycles + 1 || dut.state !== LOCKED ||
+            dut.attempts !== 2'd0 || dut.alarm_request !== 1'b0)
+            $fatal(1, "sequence must continue into LOCKOUT and recover exactly once");
+        $display("PASS: Test H partial sequence survives ALARM-to-LOCKOUT and recovers");
 
         // Test I: normal lockout expiry disables the detector and clears partial progress.
         apply_reset();
@@ -545,18 +547,21 @@ module tb_member3_admin_sequence;
         send_correct_sequence();
         if (valid_event_count != baseline_events + 1 ||
             valid_high_cycles != baseline_high_cycles + 1 ||
-            dut.admin_sequence_valid !== 1'b0)
-            $fatal(1, "first complete sequence must produce one non-sticky event");
+            dut.admin_sequence_valid !== 1'b0 || dut.state !== LOCKED ||
+            dut.attempts !== 2'd0)
+            $fatal(1, "first complete sequence must recover once and clear attempts");
+        enter_alarm();
         send_correct_sequence();
         if (valid_event_count != baseline_events + 2 ||
             valid_high_cycles != baseline_high_cycles + 2 ||
-            dut.admin_sequence_valid !== 1'b0)
-            $fatal(1, "second complete sequence must produce exactly one additional event");
+            dut.admin_sequence_valid !== 1'b0 || dut.state !== LOCKED ||
+            dut.attempts !== 2'd0)
+            $fatal(1, "second alarm cycle must produce exactly one additional recovery");
         repeat (4) @(posedge clk);
         #1;
         if (valid_event_count != baseline_events + 2 || dut.admin_sequence_valid !== 1'b0)
-            $fatal(1, "valid event must not remain asserted or retrigger after completion");
-        $display("PASS: Test K repeated sequences each produce one transient valid event");
+            $fatal(1, "valid event must not remain asserted or retrigger after recovery");
+        $display("PASS: Test K separate alarm cycles each recover exactly once");
 
         // Test L: unrelated buttons do not alter partial admin progress in ALARM.
         apply_reset();
