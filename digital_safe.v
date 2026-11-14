@@ -26,6 +26,8 @@ module digital_safe #(
     reg failed_check;
     wire override_pulse, tick_1hz, alarm_done, lockout_done, alarm_led;
     wire [1:0] attempts, override_progress;
+    reg [1:0] admin_progress_reg;
+    reg admin_sequence_valid;
     reg [2:0] state;
     localparam integer ALARM_WIDTH = (ALARM_SECONDS < 2) ? 1 : $clog2(ALARM_SECONDS + 1);
     localparam integer LOCKOUT_WIDTH = (LOCKOUT_SECONDS < 2) ? 1 : $clog2(LOCKOUT_SECONDS + 1);
@@ -88,8 +90,43 @@ module digital_safe #(
 
     assign limit_violation = (attempts >= MAX_ATTEMPTS[1:0]);
     assign alarm_request = limit_violation || tamper_latched;
-    assign override_pulse = 1'b0;
-    assign override_progress = 2'd0;
+    assign override_pulse = admin_sequence_valid &&
+        ((state == ALARM) || (state == LOCKOUT));
+    assign override_progress = admin_progress_reg;
+
+    // Keep sequence recognition separate from the recovery handshake.
+    always @(posedge CLK100MHZ) begin
+        if (rst) begin
+            admin_progress_reg <= 2'd0;
+            admin_sequence_valid <= 1'b0;
+        end else begin
+            admin_sequence_valid <= 1'b0;
+            if ((state != ALARM) && (state != LOCKOUT)) begin
+                admin_progress_reg <= 2'd0;
+            end else if (left_pulse && up_pulse) begin
+                admin_progress_reg <= 2'd0;
+            end else if (left_pulse) begin
+                case (admin_progress_reg)
+                    2'd0: admin_progress_reg <= 2'd1;
+                    2'd1: admin_progress_reg <= 2'd0;
+                    2'd2: admin_progress_reg <= 2'd3;
+                    2'd3: admin_progress_reg <= 2'd0;
+                    default: admin_progress_reg <= 2'd0;
+                endcase
+            end else if (up_pulse) begin
+                case (admin_progress_reg)
+                    2'd0: admin_progress_reg <= 2'd0;
+                    2'd1: admin_progress_reg <= 2'd2;
+                    2'd2: admin_progress_reg <= 2'd0;
+                    2'd3: begin
+                        admin_progress_reg <= 2'd0;
+                        admin_sequence_valid <= 1'b1;
+                    end
+                    default: admin_progress_reg <= 2'd0;
+                endcase
+            end
+        end
+    end
     localparam integer TICK_LIMIT = (CLK_HZ > 0) ? CLK_HZ : 1;
     localparam integer TICK_WIDTH = (TICK_LIMIT < 2) ? 1 : $clog2(TICK_LIMIT + 1);
     reg [TICK_WIDTH-1:0] tick_counter;
