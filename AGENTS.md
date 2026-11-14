@@ -8,33 +8,53 @@ Read `README.md` and `TASKS.md` before making changes. Follow the four-person al
 
 ## Non-negotiable instructions
 
-1. Keep the implementation simple and beginner-friendly.
-2. Use Verilog compatible with the team's Vivado version. Do not introduce SystemVerilog-only syntax unless the team explicitly approves it.
-3. Do not redesign the whole project when a small change is enough.
-4. Do not add networking, software services, databases, cryptography libraries, or unrelated features.
-5. Do not silently change top-level module ports, signal polarity, state encodings, PIN input mapping, or shared interfaces.
-6. Before changing a shared interface, inspect its current use and explain the proposed change.
-7. Use the existing `digital_safe.v` as the integration starting point. Inspect it before editing; some signals may currently be tied to constants/placeholders.
-8. Do not assume a feature works because a signal or module name exists. Trace the actual logic.
-9. Use parameters/localparams for clock frequency, PIN values, attempt limit, alarm duration, and lockout duration where useful.
-10. Avoid latches. Use nonblocking assignments (`<=`) in clocked sequential blocks and blocking assignments (`=`) in combinational blocks.
-11. Keep reset behavior consistent. The Nexys A7 `CPU_RESETN` input is active-low; document any internal active-high reset conversion.
-12. Use clock-enable pulses for slow timing. Avoid using a counter bit as a new clock.
-13. Debounce physical buttons and create one-cycle press events before using them in the FSM.
-14. The board family is the Digilent Nexys A7 AMD Artix-7 FPGA Trainer Board; the board documentation and schematic PDFs are in the repository. Do not invent XDC pin numbers. Confirm the exact FPGA device variant/revision from the physical board and use its official master XDC.
-15. Do not overwrite another developer's work or unrelated files.
+1. **Never add AI agents as contributors**:
+   - Do NOT add AI agents (Antigravity, Codex, Copilot, ChatGPT, Claude, etc.) as contributors, authors, co-authors, or reviewers.
+   - Do NOT include `Co-authored-by:` trailers mentioning AI agents in git commit messages.
+   - Commits, pull requests, and documentation credits must only reflect the human repository owner/team members.
+2. **Use separate branches for each feature**:
+   - Never commit directly to `main` (or `dev`).
+   - Every individual feature, bug fix, or task must be developed on its own dedicated branch off `main` (e.g., `feature/<feature-name>`).
+   - Keep branch names lowercase with hyphens (e.g., `feature/failed-attempts-counter`, `feature/clock-enable-1hz`, `feature/countdown-timer`, `feature/tamper-detection`).
+3. **Use the commit structure provided**:
+   - Follow Conventional Commits: `<type>: <description>` (lowercase description, imperative mood, no ending period).
+   - Use the exact commit messages agreed for planned features:
+     - `feat: count failed PIN submissions`
+     - `feat: generate a configurable one-second clock enable`
+     - `feat: add a reusable timer for timed safe states`
+     - `feat: detect intrusion requests and latch tamper events`
+     - `feat: trigger alarm after three wrong PIN attempts`
+     - `feat: blink the alarm indicator during alarm states`
+   - For other changes, strictly use appropriate standard prefixes (`feat:`, `fix:`, `docs:`, `test:`, `refactor:`, `chore:`).
+4. Keep the implementation simple and beginner-friendly.
+5. Use Verilog compatible with the team's Vivado version. Do not introduce SystemVerilog-only syntax unless the team explicitly approves it.
+6. Do not redesign the whole project when a small change is enough.
+7. Do not add networking, software services, databases, cryptography libraries, or unrelated features.
+8. Do not silently change top-level module ports, signal polarity, state encodings, PIN input mapping, or shared interfaces.
+9. Before changing a shared interface, inspect its current use and explain the proposed change.
+10. Use the existing `digital_safe.v` as the integration starting point. Inspect it before editing; some signals may currently be tied to constants/placeholders.
+11. Do not assume a feature works because a signal or module name exists. Trace the actual logic.
+12. Use parameters/localparams for clock frequency, PIN values, attempt limit, alarm duration, and lockout duration where useful.
+13. Avoid latches. Use nonblocking assignments (`<=`) in clocked sequential blocks and blocking assignments (`=`) in combinational blocks.
+14. Keep reset behavior consistent. The Nexys A7 `CPU_RESETN` input is active-low; document any internal active-high reset conversion.
+15. Use clock-enable pulses for slow timing. Avoid using a counter bit as a new clock.
+16. Debounce physical buttons and create one-cycle press events before using them in the FSM.
+17. The board family is the Digilent Nexys A7 AMD Artix-7 FPGA Trainer Board; the board documentation and schematic PDFs are in the repository. Do not invent XDC pin numbers. Confirm the exact FPGA device variant/revision from the physical board and use its official master XDC.
+18. Do not overwrite another developer's work or unrelated files.
 
 ## Work process
 
 1. Inspect the current repository and relevant RTL/testbench files.
 2. Identify the task owner and the exact feature requested.
-3. State the files you plan to change and keep the change limited to those files.
-4. Confirm module ports and signal names with existing code before coding.
-5. Implement the smallest clear solution.
-6. Add or update a focused testbench for the behavior.
-7. Run the available simulator if possible. If it is unavailable, provide the exact command and state that tests were not run.
-8. Review the diff for accidental changes, unused signals, inferred latches, width mismatches, and reset mistakes.
-9. Summarize changed files, behavior implemented, tests run/results, and remaining work.
+3. Create and switch to a separate feature branch (`feature/<feature-name>`) off `main` before writing any code.
+4. State the files you plan to change and keep the change limited to those files.
+5. Confirm module ports and signal names with existing code before coding.
+6. Implement the smallest clear solution.
+7. Add or update a focused testbench for the behavior.
+8. Run the available simulator (`iverilog` and `vvp`). If it is unavailable, provide the exact command and state that tests were not run.
+9. Review the diff for accidental changes, unused signals, inferred latches, width mismatches, and reset mistakes.
+10. Commit changes using the specified commit message structure (e.g., `feat: ...`) under the user's git identity—never add agent co-author tags.
+11. Summarize changed files, behavior implemented, tests run/results, and remaining work.
 
 ## Coding style
 
