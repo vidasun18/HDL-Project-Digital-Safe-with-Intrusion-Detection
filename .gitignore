@@ -1,0 +1,13 @@
+# Agent files and instructions
+AGENTS.md
+CLAUDE.md
+.agents/
+.gemini/
+.codex/
+.claude/
+
+# Simulation and build artifacts
+*.vvp
+*.vcd
+*.log
+*.jou
