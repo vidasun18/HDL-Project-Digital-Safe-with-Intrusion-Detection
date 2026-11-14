@@ -60,7 +60,19 @@ module digital_safe #(
     );
 
     assign pin_match = (state == CHECKING) && (captured_pin == USER_PIN);
-    assign attempts = 2'd0;
+
+    reg [1:0] attempt_reg;
+    assign attempts = attempt_reg;
+
+    always @(posedge CLK100MHZ) begin
+        if (rst || clear_counters || (state == UNLOCKED)) begin
+            attempt_reg <= 2'd0;
+        end else if (failed_check) begin
+            if (attempt_reg < 2'd3)
+                attempt_reg <= attempt_reg + 1'b1;
+        end
+    end
+
     assign limit_violation = 1'b0;
     assign alarm_request = 1'b0;
     assign tamper_latched = 1'b0;
