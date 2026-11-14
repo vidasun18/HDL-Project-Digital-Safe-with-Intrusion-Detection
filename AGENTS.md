@@ -21,7 +21,7 @@ Read `README.md` and `TASKS.md` before making changes. Follow the four-person al
 11. Keep reset behavior consistent. The Nexys A7 `CPU_RESETN` input is active-low; document any internal active-high reset conversion.
 12. Use clock-enable pulses for slow timing. Avoid using a counter bit as a new clock.
 13. Debounce physical buttons and create one-cycle press events before using them in the FSM.
-14. Do not invent Nexys A7 XDC pin numbers. Confirm the exact board variant and use its official master XDC.
+14. The board family is the Digilent Nexys A7 AMD Artix-7 FPGA Trainer Board; the board documentation and schematic PDFs are in the repository. Do not invent XDC pin numbers. Confirm the exact FPGA device variant/revision from the physical board and use its official master XDC.
 15. Do not overwrite another developer's work or unrelated files.
 
 ## Work process
@@ -51,14 +51,15 @@ Read `README.md` and `TASKS.md` before making changes. Follow the four-person al
 
 Before integration, the team must agree on:
 
-- PIN entry source and width.
-- Which button submits the PIN and which button manually locks the safe.
-- Which input simulates the tamper sensor.
-- Admin code entry method and recovery behavior.
+- PIN entry source and width: `SW[15:0]` is the 16-bit PIN.
+- Button mapping: `BTNC` submits, `BTND` manually locks, `BTNU` is reserved for admin recovery, `BTNR` simulates tamper, and `BTNL` is unassigned.
+- Admin code entry method and recovery behavior beyond the reserved `BTNU` input.
 - Names and active levels of `pin_valid`, `pin_failed`, `alarm_request`, `tamper_event`, `admin_recover`, timer tick/done, and lock/unlock signals.
 - Attempt limit, alarm duration, lockout duration, and display format.
 
 Do not independently invent different meanings for the same signal. If the existing design does not define an interface, propose a minimal one and document it before implementation.
+
+The board-family and input mapping above are confirmed for this project. The exact FPGA device variant/revision remains a hardware check and must be confirmed before XDC constraints are written.
 
 ## Verification expectations
 
