@@ -247,6 +247,11 @@ module digital_safe #(
         LED[2] = alarm_led;               // alarm indicator
         LED[4:3] = attempts;              // attempt count
         LED[5] = tamper_latched;          // tamper indicator
+        if ((state == ALARM) || (state == LOCKOUT)) begin
+            LED[6] = (override_progress >= 2'd1);
+            LED[7] = (override_progress >= 2'd2);
+            LED[8] = (override_progress >= 2'd3);
+        end
     end
 endmodule
 
