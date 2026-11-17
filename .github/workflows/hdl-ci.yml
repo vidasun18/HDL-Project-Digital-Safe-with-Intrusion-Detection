@@ -1,0 +1,23 @@
+name: HDL Simulation CI
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch:
+
+jobs:
+  verilog-simulation:
+    name: Icarus self-checking simulations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Icarus Verilog
+        run: sudo apt-get update && sudo apt-get install -y iverilog
+      - name: Version
+        run: iverilog -V | head -n 3
+      - name: Run self-checking smoke and unit tests
+        run: bash scripts/run_tests.sh
+      - name: Notice about hardware validation
+        if: always()
+        run: echo 'CI simulation is NOT equivalent to Vivado timing closure or real Nexys A7 programming.'
