@@ -3,6 +3,7 @@ module digital_safe #(
     parameter integer DEBOUNCE_CYCLES = 1_000_000,
     parameter integer ALARM_SECONDS = 2,
     parameter integer LOCKOUT_SECONDS = 15,
+    parameter integer MAX_ATTEMPTS = 3,
     parameter [15:0] USER_PIN = 16'hA5C3,
     parameter [15:0] ADMIN_CODE = 16'hC0DE
 )(
@@ -31,7 +32,8 @@ module digital_safe #(
     wire [ALARM_WIDTH-1:0] alarm_elapsed;
     wire [LOCKOUT_WIDTH-1:0] lockout_elapsed;
     wire clear_counters = override_pulse || lockout_done;
-    wire [7:0] remaining = 8'd0;
+    wire [7:0] remaining = (state == ALARM)   ? ((ALARM_SECONDS >= alarm_elapsed) ? (ALARM_SECONDS - alarm_elapsed) : 8'd0) :
+                           (state == LOCKOUT) ? ((LOCKOUT_SECONDS >= lockout_elapsed) ? (LOCKOUT_SECONDS - lockout_elapsed) : 8'd0) : 8'd0;
     wire [3:0] status_code = (state == LOCKED) ? 4'h1 :
                              (state == CHECKING) ? 4'hC :
                              (state == UNLOCKED) ? 4'h2 :
@@ -60,17 +62,69 @@ module digital_safe #(
     );
 
     assign pin_match = (state == CHECKING) && (captured_pin == USER_PIN);
-    assign attempts = 2'd0;
-    assign limit_violation = 1'b0;
-    assign alarm_request = 1'b0;
-    assign tamper_latched = 1'b0;
+
+    reg [1:0] attempt_reg;
+    assign attempts = attempt_reg;
+
+    always @(posedge CLK100MHZ) begin
+        if (rst || clear_counters || (state == UNLOCKED)) begin
+            attempt_reg <= 2'd0;
+        end else if (failed_check) begin
+            if (attempt_reg < 2'd3)
+                attempt_reg <= attempt_reg + 1'b1;
+        end
+    end
+
+    reg tamper_latched_reg;
+    assign tamper_latched = tamper_latched_reg;
+
+    always @(posedge CLK100MHZ) begin
+        if (rst || clear_counters) begin
+            tamper_latched_reg <= 1'b0;
+        end else if (tamper_pulse && (state == LOCKED)) begin
+            tamper_latched_reg <= 1'b1;
+        end
+    end
+
+    assign limit_violation = (attempts >= MAX_ATTEMPTS[1:0]);
+    assign alarm_request = limit_violation || tamper_latched;
     assign override_pulse = 1'b0;
     assign override_progress = 2'd0;
-    assign tick_1hz = 1'b0;
-    assign alarm_done = 1'b0;
-    assign alarm_elapsed = 0;
-    assign lockout_done = 1'b0;
-    assign lockout_elapsed = 0;
+    localparam integer TICK_LIMIT = (CLK_HZ > 0) ? CLK_HZ : 1;
+    localparam integer TICK_WIDTH = (TICK_LIMIT < 2) ? 1 : $clog2(TICK_LIMIT + 1);
+    reg [TICK_WIDTH-1:0] tick_counter;
+    reg tick_1hz_reg;
+    assign tick_1hz = tick_1hz_reg;
+
+    always @(posedge CLK100MHZ) begin
+        if (rst) begin
+            tick_counter <= {TICK_WIDTH{1'b0}};
+            tick_1hz_reg <= 1'b0;
+        end else if (tick_counter >= TICK_LIMIT - 1) begin
+            tick_counter <= {TICK_WIDTH{1'b0}};
+            tick_1hz_reg <= 1'b1;
+        end else begin
+            tick_counter <= tick_counter + 1'b1;
+            tick_1hz_reg <= 1'b0;
+        end
+    end
+    safe_timer #(.DURATION_SECONDS(ALARM_SECONDS)) timer_alarm (
+        .clk(CLK100MHZ),
+        .reset(rst),
+        .enable(state == ALARM),
+        .tick(tick_1hz),
+        .elapsed(alarm_elapsed),
+        .done(alarm_done)
+    );
+
+    safe_timer #(.DURATION_SECONDS(LOCKOUT_SECONDS)) timer_lockout (
+        .clk(CLK100MHZ),
+        .reset(rst),
+        .enable(state == LOCKOUT),
+        .tick(tick_1hz),
+        .elapsed(lockout_elapsed),
+        .done(lockout_done)
+    );
     always @(posedge CLK100MHZ) begin
         if (rst) begin
             state <= LOCKED;
@@ -117,7 +171,34 @@ module digital_safe #(
             end
         end
     end
-    assign alarm_led = 1'b0;
+    localparam integer BLINK_LIMIT = (CLK_HZ > 1) ? (CLK_HZ / 2) : 1;
+    localparam integer BLINK_WIDTH = (BLINK_LIMIT < 2) ? 1 : $clog2(BLINK_LIMIT + 1);
+    reg [BLINK_WIDTH-1:0] blink_counter;
+    reg blink_tick;
+    reg alarm_blink_reg;
+
+    always @(posedge CLK100MHZ) begin
+        if (rst) begin
+            blink_counter <= {BLINK_WIDTH{1'b0}};
+            blink_tick <= 1'b0;
+        end else if (blink_counter >= BLINK_LIMIT - 1) begin
+            blink_counter <= {BLINK_WIDTH{1'b0}};
+            blink_tick <= 1'b1;
+        end else begin
+            blink_counter <= blink_counter + 1'b1;
+            blink_tick <= 1'b0;
+        end
+    end
+
+    always @(posedge CLK100MHZ) begin
+        if (rst || (state != ALARM)) begin
+            alarm_blink_reg <= 1'b1;
+        end else if (blink_tick) begin
+            alarm_blink_reg <= ~alarm_blink_reg;
+        end
+    end
+
+    assign alarm_led = (state == ALARM) && alarm_blink_reg;
     assign SEG = 7'b1111111;
     assign AN = 8'hFF;
     assign DP = 1'b1;
@@ -126,6 +207,9 @@ module digital_safe #(
         LED = 16'b0;
         LED[0] = (state != UNLOCKED);     // locked indicator
         LED[1] = (state == UNLOCKED);     // simulated unlock output
+        LED[2] = alarm_led;               // alarm indicator
+        LED[4:3] = attempts;              // attempt count
+        LED[5] = tamper_latched;          // tamper indicator
     end
 endmodule
 
@@ -158,6 +242,41 @@ module safe_button_debounce #(
                     press_pulse <= 1'b1;
             end else begin
                 debounce_count <= debounce_count + 1'b1;
+            end
+        end
+    end
+endmodule
+
+module safe_timer #(
+    parameter integer DURATION_SECONDS = 1,
+    parameter integer TIMER_WIDTH = (DURATION_SECONDS < 2) ? 1 : $clog2(DURATION_SECONDS + 1)
+)(
+    input wire clk,
+    input wire reset,
+    input wire enable,
+    input wire tick,
+    output wire [TIMER_WIDTH-1:0] elapsed,
+    output wire done
+);
+    reg [TIMER_WIDTH-1:0] elapsed_reg;
+    reg done_reg;
+
+    assign elapsed = elapsed_reg;
+    assign done = done_reg;
+
+    always @(posedge clk) begin
+        if (reset || !enable) begin
+            elapsed_reg <= {TIMER_WIDTH{1'b0}};
+            done_reg <= 1'b0;
+        end else begin
+            done_reg <= 1'b0;
+            if (tick) begin
+                if (elapsed_reg + 1'b1 >= DURATION_SECONDS) begin
+                    elapsed_reg <= DURATION_SECONDS[TIMER_WIDTH-1:0];
+                    done_reg <= 1'b1;
+                end else begin
+                    elapsed_reg <= elapsed_reg + 1'b1;
+                end
             end
         end
     end
