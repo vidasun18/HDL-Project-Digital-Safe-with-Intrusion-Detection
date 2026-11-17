@@ -16,11 +16,13 @@ module digital_safe #(
     output wire DP
 );
     localparam [2:0] LOCKED=0, CHECKING=1, UNLOCKED=2, ALARM=3, LOCKOUT=4;
+    // CPU_RESETN is active-low; rst is the active-high synchronous reset.
     wire rst = ~CPU_RESETN;
     wire submit_pulse, up_pulse, left_pulse, tamper_pulse, lock_pulse;
     wire unused_stable_c,unused_stable_u,unused_stable_l,unused_stable_r,unused_stable_d;
     reg [15:0] captured_pin;
-    wire pin_match, failed_check, limit_violation, alarm_request, tamper_latched;
+    wire pin_match, limit_violation, alarm_request, tamper_latched;
+    reg failed_check;
     wire override_pulse, tick_1hz, alarm_done, lockout_done, alarm_led;
     wire [1:0] attempts, override_progress;
     reg [2:0] state;
@@ -36,17 +38,28 @@ module digital_safe #(
                              (state == ALARM) ? 4'hA : 4'hD;
     wire [31:0] display_value = 32'd0;
 
-    assign submit_pulse = 1'b0;
-    assign up_pulse = 1'b0;
-    assign left_pulse = 1'b0;
-    assign tamper_pulse = 1'b0;
-    assign lock_pulse = 1'b0;
+    safe_button_debounce #(.DEBOUNCE_CYCLES(DEBOUNCE_CYCLES)) debounce_submit (
+        .clk(CLK100MHZ), .reset(rst), .button_in(BTNC),
+        .stable_level(unused_stable_c), .press_pulse(submit_pulse)
+    );
+    safe_button_debounce #(.DEBOUNCE_CYCLES(DEBOUNCE_CYCLES)) debounce_up (
+        .clk(CLK100MHZ), .reset(rst), .button_in(BTNU),
+        .stable_level(unused_stable_u), .press_pulse(up_pulse)
+    );
+    safe_button_debounce #(.DEBOUNCE_CYCLES(DEBOUNCE_CYCLES)) debounce_left (
+        .clk(CLK100MHZ), .reset(rst), .button_in(BTNL),
+        .stable_level(unused_stable_l), .press_pulse(left_pulse)
+    );
+    safe_button_debounce #(.DEBOUNCE_CYCLES(DEBOUNCE_CYCLES)) debounce_tamper (
+        .clk(CLK100MHZ), .reset(rst), .button_in(BTNR),
+        .stable_level(unused_stable_r), .press_pulse(tamper_pulse)
+    );
+    safe_button_debounce #(.DEBOUNCE_CYCLES(DEBOUNCE_CYCLES)) debounce_lock (
+        .clk(CLK100MHZ), .reset(rst), .button_in(BTND),
+        .stable_level(unused_stable_d), .press_pulse(lock_pulse)
+    );
 
-    always @(posedge CLK100MHZ or posedge rst) begin
-        if (rst) captured_pin <= 16'h0000;
-        else captured_pin <= 16'h0000;
-    end
-    assign pin_match = 1'b0;
+    assign pin_match = (state == CHECKING) && (captured_pin == USER_PIN);
     assign attempts = 2'd0;
     assign limit_violation = 1'b0;
     assign alarm_request = 1'b0;
@@ -58,12 +71,52 @@ module digital_safe #(
     assign alarm_elapsed = 0;
     assign lockout_done = 1'b0;
     assign lockout_elapsed = 0;
-    // CPU_RESETN is active-low; rst is its active-high synchronous form.
-    // The safe remains locked until future authentication logic changes state.
     always @(posedge CLK100MHZ) begin
-        if (rst) state <= LOCKED;
+        if (rst) begin
+            state <= LOCKED;
+            captured_pin <= 16'h0000;
+            failed_check <= 1'b0;
+        end else begin
+            failed_check <= 1'b0;
+            if (override_pulse) begin
+                state <= LOCKED;
+            end else if (alarm_request && (state != ALARM) && (state != LOCKOUT)) begin
+                state <= ALARM;
+            end else begin
+                case (state)
+                    LOCKED: begin
+                        if (submit_pulse) begin
+                            captured_pin <= SW;
+                            state <= CHECKING;
+                        end
+                    end
+                    CHECKING: begin
+                        if (lock_pulse) begin
+                            state <= LOCKED;
+                        end else if (pin_match) begin
+                            state <= UNLOCKED;
+                        end else begin
+                            failed_check <= 1'b1;
+                            state <= LOCKED;
+                        end
+                    end
+                    UNLOCKED: begin
+                        if (lock_pulse)
+                            state <= LOCKED;
+                    end
+                    ALARM: begin
+                        if (alarm_done)
+                            state <= LOCKOUT;
+                    end
+                    LOCKOUT: begin
+                        if (lockout_done)
+                            state <= LOCKED;
+                    end
+                    default: state <= LOCKED;
+                endcase
+            end
+        end
     end
-    assign failed_check = 1'b0;
     assign alarm_led = 1'b0;
     assign SEG = 7'b1111111;
     assign AN = 8'hFF;
@@ -73,5 +126,39 @@ module digital_safe #(
         LED = 16'b0;
         LED[0] = (state != UNLOCKED);     // locked indicator
         LED[1] = (state == UNLOCKED);     // simulated unlock output
+    end
+endmodule
+
+module safe_button_debounce #(
+    parameter integer DEBOUNCE_CYCLES = 1
+)(
+    input wire clk,
+    input wire reset,
+    input wire button_in,
+    output reg stable_level,
+    output reg press_pulse
+);
+    localparam integer COUNTER_WIDTH =
+        (DEBOUNCE_CYCLES < 2) ? 1 : $clog2(DEBOUNCE_CYCLES);
+    reg [COUNTER_WIDTH-1:0] debounce_count;
+
+    always @(posedge clk) begin
+        if (reset) begin
+            debounce_count <= {COUNTER_WIDTH{1'b0}};
+            stable_level <= 1'b0;
+            press_pulse <= 1'b0;
+        end else begin
+            press_pulse <= 1'b0;
+            if (button_in == stable_level) begin
+                debounce_count <= {COUNTER_WIDTH{1'b0}};
+            end else if (debounce_count == DEBOUNCE_CYCLES - 1) begin
+                debounce_count <= {COUNTER_WIDTH{1'b0}};
+                stable_level <= button_in;
+                if (button_in)
+                    press_pulse <= 1'b1;
+            end else begin
+                debounce_count <= debounce_count + 1'b1;
+            end
+        end
     end
 endmodule
