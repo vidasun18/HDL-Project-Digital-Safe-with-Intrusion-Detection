@@ -58,10 +58,12 @@ The exact PIN, admin code, attempt limit, alarm duration, lockout duration, and 
 
 ```text
 .
-├── digital_safe.v       # Top-level FPGA design
-├── tests/               # Verilog testbenches
-├── TASKS.md             # Team task checklist and acceptance criteria
-└── AGENTS.md            # Instructions for coding agents
+├── digital_safe.v                 # Top-level FPGA design and board I/O integration
+├── rtl/                            # Seven-segment decoder, formatter and scan mux
+├── constraints/nexys_a7_demo.xdc   # Nexys A7 onboard pin constraints
+├── scripts/run_tests.sh            # Icarus Verilog regression entrypoint
+├── tests/                          # Unit and top-level self-checking testbenches
+└── .github/workflows/hdl-ci.yml    # Simulation CI
 ```
 
 Add extra RTL files only when they make the design easier to understand or test. Keep the top-level module and its board-facing ports clear.
@@ -73,11 +75,21 @@ Use Vivado for synthesis, implementation, and programming the Nexys A7. Use the 
 Example Icarus Verilog commands, when the testbench and source files are ready:
 
 ```bash
-iverilog -g2012 -o safe_tb.vvp digital_safe.v tests/tb_reset_locked.v
+iverilog -g2012 -o safe_tb.vvp digital_safe.v rtl/*.v tests/tb_reset_locked.v
 vvp safe_tb.vvp
 ```
 
 The command above is only a starting example; include any additional RTL files required by the final design.
+
+The full local regression is `bash scripts/run_tests.sh`. The display shows the
+state code on digit 7, failed-attempt count on digit 6, and remaining alarm or
+lockout seconds on digits 1 and 0. Digits 5 through 2 are zero. The PIN and
+admin code are never routed to the display. Segment and anode outputs are
+active-low; the decimal point is off.
+
+The XDC maps the Nexys A7 onboard I/O and constrains the 100 MHz clock. Confirm
+the physical board variant and FPGA part before creating a Vivado project or
+programming a bitstream. No board validation is claimed by simulation or CI.
 
 ## Definition of done
 

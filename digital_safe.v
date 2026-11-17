@@ -1,3 +1,4 @@
+`timescale 1ns/1ps
 module digital_safe #(
     parameter integer CLK_HZ = 100_000_000,
     parameter integer DEBOUNCE_CYCLES = 1_000_000,
@@ -36,11 +37,7 @@ module digital_safe #(
     wire clear_counters = override_pulse || lockout_done;
     wire [7:0] remaining = (state == ALARM)   ? ((ALARM_SECONDS >= alarm_elapsed) ? (ALARM_SECONDS - alarm_elapsed) : 8'd0) :
                            (state == LOCKOUT) ? ((LOCKOUT_SECONDS >= lockout_elapsed) ? (LOCKOUT_SECONDS - lockout_elapsed) : 8'd0) : 8'd0;
-    wire [3:0] status_code = (state == LOCKED) ? 4'h1 :
-                             (state == CHECKING) ? 4'hC :
-                             (state == UNLOCKED) ? 4'h2 :
-                             (state == ALARM) ? 4'hA : 4'hD;
-    wire [31:0] display_value = 32'd0;
+    wire [31:0] display_value;
 
     safe_button_debounce #(.DEBOUNCE_CYCLES(DEBOUNCE_CYCLES)) debounce_submit (
         .clk(CLK100MHZ), .reset(rst), .button_in(BTNC),
@@ -236,16 +233,30 @@ module digital_safe #(
     end
 
     assign alarm_led = (state == ALARM) && alarm_blink_reg;
-    assign SEG = 7'b1111111;
-    assign AN = 8'hFF;
-    assign DP = 1'b1;
+
+    display_formatter format_display (
+        .state(state),
+        .failed_count(attempts),
+        .remaining_seconds(remaining),
+        .digits(display_value)
+    );
+
+    sevenseg_mux display_scan (
+        .clk(CLK100MHZ),
+        .rst(rst),
+        .digits(display_value),
+        .SEG(SEG),
+        .AN(AN),
+        .DP(DP)
+    );
 
     always @(*) begin
         LED = 16'b0;
         LED[0] = (state != UNLOCKED);     // locked indicator
         LED[1] = (state == UNLOCKED);     // simulated unlock output
         LED[2] = alarm_led;               // alarm indicator
-        LED[4:3] = attempts;              // attempt count
+        LED[3] = (state == LOCKOUT);      // lockout indicator
+        LED[4] = 1'b0;                    // reserved
         LED[5] = tamper_latched;          // tamper indicator
         if ((state == ALARM) || (state == LOCKOUT)) begin
             LED[6] = (override_progress >= 2'd1);
