@@ -62,9 +62,10 @@ module tb_member3_admin_progress_leds;
             if (led[0] !== (dut.state != UNLOCKED) ||
                 led[1] !== (dut.state == UNLOCKED) ||
                 led[2] !== dut.alarm_led ||
-                led[4:3] !== dut.attempts ||
+                led[3] !== (dut.state == LOCKOUT) ||
+                led[4] !== 1'b0 ||
                 led[5] !== dut.tamper_latched)
-                $fatal(1, "existing LED[5:0] mapping changed in state %0d", dut.state);
+                $fatal(1, "LED[5:0] contract mismatch in state %0d", dut.state);
             if (led[15:9] !== 7'b0)
                 $fatal(1, "LED[15:9] must preserve their existing zero values");
         end
@@ -431,8 +432,8 @@ module tb_member3_admin_progress_leds;
         // Test I: LED[0:5] remain mapped and LED[9:15] remain unused.
         apply_reset();
         enter_tamper_alarm_with_attempt();
-        if (led[5] !== 1'b1 || led[4:3] !== 2'd1)
-            $fatal(1, "tamper and attempt indicators must retain their existing mapping");
+        if (led[5] !== 1'b1 || dut.attempts !== 2'd1 || led[3] !== 1'b0 || led[4] !== 1'b0)
+            $fatal(1, "tamper, attempt count and lockout mapping must match the interface contract");
         press_left();
         press_up();
         check_progress(3'b011);
@@ -440,8 +441,8 @@ module tb_member3_admin_progress_leds;
         wait_for_lockout();
         check_progress(3'b011);
         check_existing_leds();
-        if (led[5] !== 1'b1 || led[4:3] !== 2'd1 || led[15:9] !== 7'b0)
-            $fatal(1, "admin LEDs must not disturb attempt, tamper, or unused LED outputs");
+        if (led[5] !== 1'b1 || dut.attempts !== 2'd1 || led[15:9] !== 7'b0)
+            $fatal(1, "admin LEDs must not disturb attempts, tamper, or unused LED outputs");
         $display("PASS: Test I existing status LEDs and unallocated LEDs are preserved");
 
         // Test J: separate recovery cycles start and finish with no stale progress.
